@@ -1,0 +1,40 @@
+flowchart LR
+ cliente[Cliente]
+ restaurante[Actor restaurante]
+ subgraph D1[Catálogo y restaurantes]
+  C[Catálogo: oferta y precios]
+ end
+ subgraph D2[Pedidos]
+  P[Pedidos: coordinación y estados]
+ end
+ subgraph D3[Pagos y facturación]
+  A[Pagos: cobros y reembolsos]
+  F[Facturación: adaptador del legado]
+ end
+ subgraph D4[Logística y seguimiento]
+  L[Logística: repartidores, posiciones y entrega]
+ end
+ subgraph D5[Calificaciones]
+  K[Calificaciones: opiniones de entregas]
+ end
+ Q[(RabbitMQ: eventos de dominio)]
+ M[Pasarela externa simulada HTTP]
+ H[Sistema heredado 2012: frontera simulada HTTP]
+ cliente -->|REST consultar oferta| C
+ cliente -->|REST registrar y consultar pedido| P
+ restaurante -->|REST aceptar o rechazar| P
+ P -->|REST consultar precios| C
+ P -->|REST procesar pago| A
+ A -->|HTTP cobrar o reembolsar| M
+ A -->|pago.confirmado| Q
+ Q -->|pago.confirmado, repartidor.asignado, pedido.entregado| P
+ P -->|pedido.aceptado, pedido.cancelado| Q
+ Q -->|pedido.cancelado| A
+ Q -->|pedido.aceptado| L
+ L -->|repartidor.asignado, asignacion.pendiente, pedido.entregado| Q
+ Q -->|asignacion.pendiente| P
+ Q -->|pedido.entregado| F
+ Q -->|pedido.entregado| K
+ F -->|HTTP traducido por adaptador| H
+ cliente -->|REST registrar calificación| K
+ L -->|WebSocket posiciones del pedido| cliente
