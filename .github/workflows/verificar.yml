@@ -10,6 +10,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Verificar aislamiento del script de MySQL
+        run: sh pruebas/test-init.sh
       - run: mvn -B verify
   flujo-completo:
     runs-on: ubuntu-latest

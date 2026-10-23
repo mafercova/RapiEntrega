@@ -29,3 +29,6 @@ Se usó JAVA_HOME apuntando al JDK 21, repositorio Maven local dentro de la carp
 
 ## Historial de correcciones
 El primer intento de prueba se detuvo por attach del agente de Mockito. Se corrigió la precarga del agente. Después las pruebas de pagos detectaron expectativas HTTP agregadas demasiado tarde y una aserción sobre una instancia JPA separada; se corrigieron las pruebas. Se corrigió también la actualización de la asignación sobre la instancia gestionada devuelta por saveAndFlush. La suite posterior pasó completa.
+
+## Revisión del repositorio publicado
+GitHub Actions, ejecución 40004962894, commit b64c08b: trabajo pruebas aprobado con Maven verify en Linux. Trabajo flujo-completo falló al iniciar MySQL, antes de smoke.py. El artefacto compose.log registra MYSQL_ONETIME_PASSWORD: unbound variable. Causa: el entrypoint carga 01-usuarios.sh mediante source y heredaba su set -u. Corrección: encerrar el script en un subshell; prueba de regresión pruebas/test-init.sh para comprobar que nounset no se filtra. La corrección necesita una nueva ejecución de Actions; no se afirma todavía que el E2E esté aprobado.

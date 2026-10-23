@@ -128,7 +128,12 @@ $pedido = Invoke-RestMethod `
         "productoId": 1,
         "cantidad": 1
       }
-    ]
+    ],
+    "entrega": {
+      "latitud": 19.44,
+      "longitud": -99.14,
+      "direccion": "Campus universitario"
+    }
   }'
 ```
 
@@ -187,3 +192,13 @@ La vista muestra la última posición del pedido y las actualizaciones recibidas
 Los servicios mock están pensados para desarrollo y pruebas. Utilizan almacenamiento en memoria, por lo que su información se pierde al reiniciarlos.
 
 Las variables de entorno y credenciales locales deben mantenerse fuera del repositorio. No subas archivos `.env` con información sensible.
+
+## Entregables académicos del Reto 2
+
+- [Documento de diseño de 13 páginas](documentacion/reporte-final/RapiEntrega-Reto2.pdf).
+- [Diagrama de dominios](documentacion/dominios/diagrama-dominios.mmd).
+- [Especificaciones y contratos](documentacion/especificaciones/capacidades.md).
+- [Defensa de cinco minutos](documentacion/reporte-final/defensa.md).
+- [Resultados reales y límites](documentacion/reporte-final/resultados-pruebas.md).
+
+Los cinco pasos y los patrones deben cotejarse con la presentación completa de Unidad 2, que aún no se ha proporcionado. Los mocks y las pruebas no sustituyen esa validación académica.

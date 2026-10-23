@@ -1,4 +1,6 @@
 #!/bin/sh
+# MySQL puede cargar este archivo con source: no modificar opciones del entrypoint.
+(
 set -eu
 case "${CATALOGO_DB_PASSWORD}" in ''|*[!a-zA-Z0-9]*) echo "CATALOGO_DB_PASSWORD: usar solo caracteres alfanuméricos generados" >&2; exit 1;; esac
 MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root <<SQL
@@ -36,3 +38,4 @@ CREATE DATABASE IF NOT EXISTS calificaciones;
 CREATE USER IF NOT EXISTS 'calificaciones'@'%' IDENTIFIED BY '${CALIFICACIONES_DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON calificaciones.* TO 'calificaciones'@'%';
 SQL
+)
