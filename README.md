@@ -1,12 +1,6 @@
 # RapiEntrega · Reto 2 de Diseño de servicios
 Monorepositorio académico de seis servicios independientes y dos integraciones HTTP simuladas. Java 21, Spring Boot, Maven, MySQL, JPA, Bean Validation, RabbitMQ, REST y WebSocket. El cliente consulta oferta, registra y paga; el restaurante acepta o rechaza; tras aceptación se asigna el disponible más cercano; se actualizan posiciones, entrega, factura y calificación. Sin aceptación en cinco minutos: cancelación y reembolso idempotente.
 
-## Entregables del Reto 2
-- [Documento académico de 13 páginas](documentacion/reporte-final/RapiEntrega-Reto2.pdf) y [fuente Markdown](documentacion/reporte-final/RapiEntrega-Reto2.md).
-- [Diagrama de dominios](documentacion/dominios/diagrama-dominios.mmd), arquitectura/estados/secuencia Mermaid, matriz y cuatro especificaciones.
-- [Defensa de cinco minutos y réplica](documentacion/reporte-final/defensa.md).
-- [Resultados ejecutados y límites](documentacion/reporte-final/resultados-pruebas.md).
-
 Se aplican cinco pasos propuestos y cuatro patrones del catálogo de Erl. La presentación completa de Unidad 2 no fue proporcionada: falta cotejar sus nombres/orden, selección de patrones y encabezados exactos de plantilla. El PDF del reto por sí solo no los explica. La defensa oral y la entrega institucional corresponden al equipo.
 
 ## Inicio con Docker en PowerShell
