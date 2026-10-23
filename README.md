@@ -3,6 +3,13 @@ Plataforma académica de entregas con Java 21, Spring Boot, Maven, MySQL, JPA, B
 
 ## Requisitos e inicio local
 Instalar JDK 21, MySQL Server y PowerShell 7. Agregar mysql.exe a PATH y configurar JAVA_HOME al JDK 21. Maven Wrapper descarga Maven 3.9.9 en su primera ejecución.
+
+Los siguientes bloques se ejecutan en **PowerShell 7**, desde la raíz de RapiEntrega. Si tu terminal muestra una ruta terminada en `>` y estás en CMD, abre PowerShell 7 en esa misma carpeta escribiendo:
+```cmd
+pwsh
+```
+Si `pwsh` no se reconoce, instala PowerShell 7 o abre su aplicación desde Inicio. Los comandos `$env:...`, `Invoke-RestMethod` y los scripts `.ps1` no se ejecutan directamente en CMD. Python 3.12+ es opcional y se usa para las pruebas del flujo completo.
+
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21' # adaptar a tu instalación
 .\scripts\preparar-entorno.ps1
@@ -62,9 +69,23 @@ Alternativas: token reject rechaza el pago y timeout-once simula una respuesta p
 ## Configuración
 .env contiene MYSQL_HOST, MYSQL_PORT y una clave {SERVICIO}_DB_PASSWORD por aplicación; los scripts las cargan sin imprimirlas. Spring recibe DB_URL, DB_USER, DB_PASSWORD, PORT y URLs de servicios: CATALOGO_URL, PEDIDOS_URL, PAGOS_URL, LOGISTICA_URL, FACTURACION_URL, CALIFICACIONES_URL, PASARELA_URL y LEGADO_URL. EVENTOS_HABILITADOS=false desactiva el envío de notificaciones únicamente para pruebas aisladas.
 
-## Entregables y verificación
-- [Documento académico de 13 páginas](documentacion/reporte-final/RapiEntrega-Reto2.pdf) y [fuente](documentacion/reporte-final/RapiEntrega-Reto2.md).
-- [Dominios y servicios](documentacion/dominios/arquitectura.md), [matriz](documentacion/modelado/proceso-y-matriz.md), [contratos](documentacion/contratos-api/contratos.md) y [cuatro capacidades](documentacion/especificaciones/capacidades.md).
-- [Patrones](documentacion/patrones/justificacion.md), [defensa y réplica](documentacion/reporte-final/defensa.md) y [resultados reales](documentacion/reporte-final/resultados-pruebas.md).
+## Pruebas y verificación
+Las pruebas automáticas no requieren MySQL: utilizan H2 y respuestas HTTP controladas. Para ejecutar la suite con Java 21:
+```powershell
+.\mvnw.cmd verify
+```
+Para comprobar la comunicación HTTP real entre las ocho aplicaciones en un entorno temporal, después de compilar:
+```powershell
+python pruebas/flujo-local.py
+```
+Este comando requiere Python 3.12+ y JAVA_HOME. Inicia sus propios procesos Java en puertos libres, usa H2 y los detiene al terminar. No utiliza ni modifica las bases MySQL de la aplicación. Se diferencia de `python pruebas/smoke.py`, que comprueba las aplicaciones que tú ya tienes levantadas en sus puertos habituales.
 
-GitHub Actions ejecuta mvn verify y después python pruebas/flujo-local.py. Este segundo comando también puede ejecutarse localmente tras compilar: inicia ocho procesos Java en puertos temporales, usa H2 y los detiene al terminar, sin tocar MySQL. Requiere Python 3.12+ y JAVA_HOME. Las pruebas usan H2 y HTTP controlado; sus resultados no equivalen a una prueba contra MySQL real. Las integraciones son simulaciones HTTP con estado en memoria. Los objetivos p95 requieren medir carga; no hay autenticación productiva. Ejecutar los endpoints internos en una red local de confianza. Las cinco etapas y selección de patrones deben cotejarse con la presentación completa de Unidad 2; el PDF del reto no las reproduce. La defensa oral corresponde al equipo.
+Archivos disponibles:
+- [Colección Postman](pruebas/postman/RapiEntrega.postman_collection.json).
+- [Prueba sobre aplicaciones iniciadas](pruebas/smoke.py).
+- [Prueba con procesos temporales](pruebas/flujo-local.py).
+- [Resultados registrados de las 32 pruebas y del flujo completo](pruebas/resultados/resultado-local.json).
+- [Configuración de ejemplo](.env.example).
+- [Verificación en GitHub Actions](.github/workflows/verificar.yml).
+
+GitHub Actions ejecuta Maven verify y después la prueba con procesos Java temporales. Los resultados registrados corresponden a H2: no equivalen a una verificación contra MySQL real. Los mocks de pasarela y legado son simulaciones HTTP en memoria y pierden su información al reiniciar. No hay autenticación productiva ni resultados de pruebas de carga. Los endpoints internos están destinados a una red local de confianza.
