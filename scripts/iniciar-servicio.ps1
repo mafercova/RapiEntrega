@@ -16,5 +16,13 @@ if ($Servicio -in @('pasarela-mock','facturacion-legado-mock')) {
   $modulo = "servicios/$Servicio-service"
 }
 Push-Location $repo
-try { & .\mvnw.cmd -pl $modulo spring-boot:run; if ($LASTEXITCODE -ne 0) { throw 'El servicio terminó con error.' } }
+try {
+  if (!$env:JAVA_HOME) { throw 'Configura JAVA_HOME al JDK 21.' }
+  $java = Join-Path $env:JAVA_HOME 'bin/java.exe'
+  if (!(Test-Path -LiteralPath $java)) { throw 'No se encontró java.exe en JAVA_HOME.' }
+  $jars = @(Get-ChildItem -LiteralPath (Join-Path $repo "$modulo/target") -Filter '*.jar' -ErrorAction SilentlyContinue)
+  if ($jars.Count -ne 1) { throw 'Compila primero el proyecto con .\mvnw.cmd verify.' }
+  & $java '-Xms16m' '-Xmx128m' '-XX:+UseSerialGC' '-XX:ActiveProcessorCount=2' '-XX:ReservedCodeCacheSize=32m' '-jar' $jars[0].FullName
+  if ($LASTEXITCODE -ne 0) { throw 'El servicio terminó con error.' }
+}
 finally { Pop-Location }
