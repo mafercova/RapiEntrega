@@ -1,46 +1,58 @@
 package mx.edu.rapientrega.facturacion.services;
 
+import java.time.Clock;
+import java.util.Set;
 import mx.edu.rapientrega.facturacion.repositories.OutboxRepository;
-import org.springframework.amqp.core.*;
-import org.springframework.amqp.rabbit.connection.CorrelationData;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
 @Service
-@ConditionalOnProperty(name = "app.messaging", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(
+    name = "app.eventos-habilitados",
+    havingValue = "true",
+    matchIfMissing = true)
 public class OutboxPublisher {
   private final OutboxRepository repo;
-  private final RabbitTemplate rabbit;
+  private final RestClient http;
+  private final Environment env;
+  private final Clock clock;
 
-  public OutboxPublisher(OutboxRepository r, RabbitTemplate t) {
+  public OutboxPublisher(OutboxRepository r, RestClient h, Environment e, Clock c) {
     repo = r;
-    rabbit = t;
-    rabbit.setMandatory(true);
+    http = h;
+    env = e;
+    clock = c;
   }
 
   @Scheduled(fixedDelay = 1000)
   @Transactional
   public void enviar() {
-    for (var o : repo.pendientes()) {
+    for (var entrega : repo.pendientes()) {
+      if (entrega.proximoIntento != null && entrega.proximoIntento.isAfter(clock.instant()))
+        continue;
       try {
-        var c = new CorrelationData(o.id);
-        var p = new MessageProperties();
-        p.setContentType("application/json");
-        p.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-        rabbit.send(
-            "rapientrega.eventos",
-            o.routingKey,
-            new Message(o.payload.getBytes(java.nio.charset.StandardCharsets.UTF_8), p),
-            c);
-        if (!c.getFuture().get(5, java.util.concurrent.TimeUnit.SECONDS).isAck()
-            || c.getReturned() != null) break;
-        o.enviado = true;
+        if (!Set.of("pedidos", "pagos", "logistica", "facturacion", "calificaciones")
+            .contains(entrega.destinatario))
+          throw new IllegalStateException("DESTINATARIO_INVALIDO");
+        String url = env.getRequiredProperty("app." + entrega.destinatario + "-url");
+        http.post()
+            .uri(url + "/interno/eventos")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(entrega.payload)
+            .retrieve()
+            .toBodilessEntity();
+        entrega.enviado = true;
       } catch (Exception e) {
-        org.slf4j.LoggerFactory.getLogger(getClass()).warn("Publicación pendiente {}", o.id);
-        break;
+        entrega.intentos = Math.min(entrega.intentos + 1, 30);
+        entrega.proximoIntento =
+            clock.instant().plusSeconds(Math.min(60, 1L << Math.min(entrega.intentos, 6)));
+        org.slf4j.LoggerFactory.getLogger(getClass())
+            .warn("Entrega {} pendiente para {}", entrega.id, entrega.destinatario);
       }
     }
   }

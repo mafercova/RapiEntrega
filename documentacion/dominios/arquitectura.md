@@ -1,5 +1,5 @@
 # Dominios y propiedad de datos
-Estado: seis servicios implementados; evidencia y límites en reporte-final/resultados-pruebas.md.
+Seis aplicaciones independientes, cinco dominios y una base MySQL por servicio.
 
 | Dominio | Servicio / tipo | Datos exclusivos | Responsabilidad |
 |---|---|---|---|
@@ -10,24 +10,9 @@ Estado: seis servicios implementados; evidencia y límites en reporte-final/resu
 | Logística y seguimiento | logistica / entidad | Repartidores, disponibilidad, asignaciones y posiciones | Reservar repartidor, actualizar posición, confirmar entrega |
 | Calificaciones | calificaciones / entidad | Puntuación, comentario, cliente y pedido | Registrar opinión de entrega confirmada |
 
-Cada servicio posee una base MySQL y credencial independiente. No se permiten joins entre bases ni repositorios compartidos. Compose crea seis bases y seis usuarios con permisos exclusivos. preparar-entorno.ps1 genera sus contraseñas locales externas. El cliente y restaurante se representan mediante identificadores académicos; autenticación está pendiente y no debe anunciarse aptitud para producción.
 
-```mermaid
-flowchart LR
- C[Cliente] --> CA[Catálogo :8081]
- C --> P[Pedidos :8082]
- R[Restaurante] --> P
- P --> CA
- P --> PA[Pagos :8083]
- PA --> M[Pasarela mock HTTP :8091]
- P --> Q[(RabbitMQ topic)]
- PA --> Q
- Q --> L[Logística :8084]
- Q --> F[Facturación :8085]
- Q --> CL[Calificaciones :8086]
- F --> H[Legado mock HTTP :8092]
- L --> W[WebSocket seguimiento]
- W --> C
-```
+Ningún servicio consulta tablas ajenas. scripts/crear-bases.ps1 crea bases y usuarios locales; scripts/iniciar-servicio.ps1 ejecuta cada aplicación mediante Maven. El estado de entrega de eventos se guarda en Outbox del productor y la deduplicación en Inbox del suscriptor. Cada notificación tiene una entrega independiente por destinatario.
 
-Los adaptadores HTTP y las dos aplicaciones de simulación están implementados. El diagrama agrupado y etiquetado está en diagrama-dominios.mmd. Compose pendiente de ejecución local por ausencia de Docker.
+Cliente y restaurante se representan con identificadores académicos; no hay autenticación productiva. Los servicios escuchan por defecto en 127.0.0.1. La difusión WebSocket se mantiene dentro de una instancia de logística. Un despliegue mayor requiere optimizar selección de repartidores y barrido de entregas, medir carga y resolver distribución de suscripciones.
+
+El diagrama en diagrama-dominios.mmd identifica los límites y los canales. Los adaptadores de pasarela y legado usan HTTP hacia aplicaciones de simulación separadas. MySQL se instala como servidor local; los procesos Java se inician directamente con Maven.

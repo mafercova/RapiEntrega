@@ -4,11 +4,11 @@ Arquitectura Orientada a Servicios · Unidad 2 · Reto 2 · Ingeniería en Siste
 
 RapiEntrega conecta clientes, restaurantes y repartidores para consultar oferta, registrar pedidos, pagar, recibir una decisión del restaurante, coordinar entrega y calificar. El caso exige cancelar y reembolsar cuando no existe aceptación dentro de cinco minutos. Además, una pasarela externa conserva su propia API y la facturación depende de un sistema heredado de 2012 que no puede sustituirse. Estas restricciones motivan contratos independientes, una composición de proceso y adaptadores explícitos.
 
-Se delimitan cinco dominios y seis servicios Spring Boot independientes: catálogo, pedidos, pagos, logística, facturación y calificaciones. Pagos y facturación pertenecen al mismo dominio financiero pero poseen datos y responsabilidades diferentes. El despliegue académico usa Java 21, Maven, MySQL, REST, Bean Validation, RabbitMQ y WebSocket. No se comparten tablas ni se realizan consultas SQL entre servicios.
+Se delimitan cinco dominios y seis servicios Spring Boot independientes: catálogo, pedidos, pagos, logística, facturación y calificaciones. Pagos y facturación pertenecen al mismo dominio financiero pero poseen datos y responsabilidades diferentes. El despliegue académico usa Java 21, Maven, MySQL, REST, Bean Validation, eventos HTTP diferidos y WebSocket. No se comparten tablas ni se realizan consultas SQL entre servicios.
 
 La prioridad de corrección es impedir tres fallos: aceptar después del plazo, cobrar o reembolsar dos veces y reservar al mismo repartidor para dos entregas activas. Los estados persistidos, restricciones únicas, bloqueos y claves idempotentes cubren estos riesgos. La consistencia entre servicios es eventual; la recepción de un pago no obliga a bloquear la llamada del cliente hasta que todos los suscriptores terminen.
 
-El repositorio incluye código para las ocho aplicaciones —seis servicios y dos simulaciones HTTP—, datos de ejemplo, colección Postman, Compose, pruebas y guía de demostración. El carácter simulado de pasarela y legado se declara en sus respuestas y documentación. No existe integración con tarjetas reales ni un sistema fiscal real.
+El repositorio incluye código para las ocho aplicaciones —seis servicios y dos simulaciones HTTP—, datos de ejemplo, colección Postman, scripts locales, pruebas y guía de demostración. El carácter simulado de pasarela y legado se declara en sus respuestas y documentación. No existe integración con tarjetas reales ni un sistema fiscal real.
 
 La consigna fuente es Retos_Unidad_2_Diseno_de_servicios.pdf, páginas 10–17. Exige documento de 10–15 páginas, diagrama de dominios, implementación y debate. No fija esta pila tecnológica: se eligió por la solicitud del proyecto. La presentación completa de Unidad 2 no fue proporcionada; la denominación exacta de los cinco pasos, los patrones vistos y los encabezados de la plantilla requieren cotejo docente. Se documenta una propuesta verificable sin atribuirla al profesor.
 
@@ -26,7 +26,7 @@ Los siguientes cinco pasos son una propuesta aplicada al caso; falta cotejar sus
 
 3) Agrupar y clasificar candidatos. Catálogo concentra entidades restaurante/producto; logística posee repartidor/asignación/posición; calificaciones posee opinión y una proyección mínima de entrega. Pedidos es tarea: coordina una compra concreta y sus transiciones. Pagos y facturación son utilidades de integración, con reglas locales de transacción y folio. Resultado: seis servicios agrupados en cinco dominios y tipos explícitos, sin que catálogo decida aceptación ni logística calcule importes.
 
-4) Definir contratos y composición. REST solicitud-respuesta cubre consultas y comandos que necesitan resultado inmediato. RabbitMQ comunica hechos persistidos y habilita consumidores independientes. WebSocket comunica cambios de posición del servidor al cliente. Los contratos definen entradas con tipos, salidas, errores e idempotencia. Resultado: cuatro especificaciones completas, tabla de mensajes y secuencia. Pedidos controla la política de cinco minutos; pagos controla la compensación y no decide cuándo un pedido vence.
+4) Definir contratos y composición. REST solicitud-respuesta cubre consultas y comandos que necesitan resultado inmediato. Una tarea de Spring entrega por HTTP los hechos persistidos a cada suscriptor de manera independiente. WebSocket comunica cambios de posición del servidor al cliente. Los contratos definen entradas con tipos, salidas, errores e idempotencia. Resultado: cuatro especificaciones completas, tabla de mensajes y secuencia. Pedidos controla la política de cinco minutos; pagos controla la compensación y no decide cuándo un pedido vence.
 
 5) Refinar y validar. Se elimina la duplicación de precios, estados y reservas; se conserva una copia histórica del precio dentro del pedido y una proyección de entrega en calificaciones. Estas copias responden a contratos, no a acceso compartido a tablas. Se revisan límite temporal, carreras, evento duplicado, timeout ambiguo y recuperación. Resultado: pruebas de precio, límites, reembolso único, reserva concurrente y errores de integración, más una lista de límites de despliegue.
 
@@ -77,11 +77,11 @@ El sistema conserva separación entre notificación de un hecho y ejecución de 
 
 ![Dominios y servicios](../dominios/diagrama-dominios.svg)
 
-Cada aplicación dispone de su propia base MySQL y usuario con permisos exclusivamente sobre ella. Compose crea bases y usuarios en un volumen nuevo; las contraseñas se generan localmente y se excluyen de Git. La proyección de entrega en calificaciones contiene solo pedido y cliente: permite validar la opinión sin hacer un join al servicio de pedidos.
+Cada aplicación tiene su propia base MySQL y usuario local con permisos exclusivos. Las bases se preparan con scripts/crear-bases.ps1 y cada proceso se inicia mediante scripts/iniciar-servicio.ps1. No se comparten tablas ni se hacen joins entre aplicaciones.
 
-REST: cliente consulta catálogo y registra pedido; pedidos obtiene precios y pagos obtiene el importe del pedido. Eventos: pagos confirma o rechaza; pedidos acepta o cancela; logística asigna y entrega. Entrega alcanza pedidos, facturación y calificaciones mediante tres colas diferentes. WebSocket: logística difunde posiciones. HTTP externo: pagos llama al mock de pasarela y facturación traduce hacia el mock del legado.
+Las notificaciones se guardan como entregas en la tabla Outbox del productor. Una tarea invoca HTTP hacia los servicios suscritos y cada receptor confirma después de persistir su efecto e Inbox. La publicación-suscripción tiene destinatarios estáticos y no necesita un componente de infraestructura separado. La figura central representa este mecanismo lógico distribuido, no un servicio adicional.
 
-El diagrama Mermaid completo con flechas etiquetadas está en documentacion/dominios/diagrama-dominios.mmd. La figura resume límites e interacciones principales; las tablas de mensajes precisan emisores y destinatarios.
+REST sirve para consultas, pago y decisiones inmediatas. WebSocket difunde posiciones desde la instancia de logística. Los adaptadores externos usan HTTP hacia las dos aplicaciones de simulación. El diagrama Mermaid completo incluye las interacciones principales etiquetadas.
 
 <!-- pagebreak -->
 
@@ -95,7 +95,7 @@ Process Abstraction. Problema: una compra combina reglas de varias áreas y podr
 
 Legacy Wrapper. Problema: no se puede reemplazar la facturación de 2012 ni propagar su formato a todos los equipos. Aplicación: facturacion-service recibe pedido.entregado y LegadoAdapter transforma pedidoId/clienteId a ID_ORDEN/ID_CLIENTE y obtiene NUM_FOLIO mediante HTTP simulado. Evidencia: adaptador, trabajo de factura persistido y prueba de fallo/reintento. Coste: latencia y dependencia del sistema legado; un estado REVISION y una operación de recuperación permiten resolver fallos persistentes. No se supone que el sistema real de 2012 tenga REST: el mock representa su frontera para la práctica.
 
-Event-Driven Messaging. Problema: entrega interesa a varios servicios y no debe esperar a que facturación y calificaciones estén disponibles simultáneamente. Aplicación: un exchange topic con colas durables por servicio distribuye el evento. Evidencia: Messaging, Eventos, OutboxPublisher, EventConsumer e inbox. Coste: consistencia eventual, duplicados y necesidad de inspeccionar DLQ. La idempotencia de efectos es una propiedad de las reglas y restricciones locales; no se promete entrega exactly-once.
+Event-Driven Messaging. Problema: entrega interesa a varios servicios y no debe esperar a que facturación y calificaciones estén disponibles simultáneamente. Aplicación: una publicación crea una entrega persistida por servicio interesado; una tarea realiza HTTP en segundo plano. Evidencia: Eventos, OutboxPublisher, EventoController e Inbox. Coste: consistencia eventual, destinatarios estáticos y reintentos persistidos que deben inspeccionarse si el fallo continúa. La idempotencia de efectos es una propiedad de las reglas y restricciones locales; no se promete entrega exactly-once.
 
 Estas decisiones resuelven problemas distintos: propiedad de entidades, composición del proceso, encapsulación del legado y comunicación de hechos. Outbox e inbox son mecanismos de fiabilidad complementarios; no se presentan como nombres verificados del catálogo de clase.
 
@@ -105,25 +105,28 @@ Fuente primaria: Thomas Erl, SOA Design Patterns, índice oficial: https://www.t
 
 # 6. Comunicación, contratos y publicación-suscripción
 
-Los contratos REST requieren JSON y rutas /api/v1. Consultas de catálogo, registro, pago y decisiones del restaurante usan solicitud-respuesta síncrona: el consumidor necesita saber si su entrada fue válida. La aceptación devuelve el estado de negocio sin esperar una asignación física ni la factura. Los adaptadores HTTP externos también usan solicitud-respuesta, encapsulados en sus respectivos servicios.
+REST solicitud-respuesta síncrona cubre catálogo, registro, pago, decisión del restaurante y comandos del repartidor porque requieren confirmar validación y estado. Los adaptadores de pasarela y legado usan HTTP con respuesta inmediata dentro de sus servicios propietarios.
 
-| Mensaje asíncrono | Emisor | Suscriptores |
-|---|---|---|
-| pago.confirmado.v1 | pagos | pedidos |
-| pago.rechazado.v1 | pagos | pedidos |
-| pedido.aceptado.v1 | pedidos | logística |
-| pedido.cancelado.v1 | pedidos | pagos |
-| asignacion.pendiente.v1 | logística | pedidos |
-| repartidor.asignado.v1 | logística | pedidos |
-| pedido.entregado.v1 | logística | pedidos, facturación, calificaciones |
+| Tipo de evento | Publicador | Consumidores | Payload |
+|---|---|---|---|
+| pago.confirmado.v1 | pagos | pedidos | pedidoId, pagoId, importe decimal, moneda |
+| pago.rechazado.v1 | pagos | pedidos | pedidoId, pagoId, importe decimal, moneda |
+| pedido.aceptado.v1 | pedidos | logística | pedidoId, clienteId, restauranteId, latitud double, longitud double |
+| pedido.cancelado.v1 | pedidos | pagos | pedidoId, pagoId, motivo |
+| asignacion.pendiente.v1 | logística | pedidos | pedidoId, motivo |
+| repartidor.asignado.v1 | logística | pedidos | pedidoId, repartidorId |
+| pedido.entregado.v1 | logística | pedidos, facturación, calificaciones | pedidoId, clienteId, deliveredAt instant |
 
-Publicación-suscripción se demuestra especialmente con pedido.entregado: tres colas reciben el mismo hecho. Tres consumidores compitiendo sobre una sola cola no satisfarían ese objetivo. Cada servicio consume solo sus claves; todos declaran la topología durable para evitar pérdidas por orden de arranque. El exchange se llama rapientrega.eventos y cada cola {servicio}.eventos posee una DLQ.
 
-Sobre: eventId UUID, eventType string, version integer=1, occurredAt instant UTC, aggregateId string y payload object. Los payloads contienen referencias de negocio y los datos mínimos requeridos, nunca tokens de tarjeta. El esquema está en contratos-api/evento.schema.json. No se establece orden global; los estados terminales impiden que mensajes tardíos hagan retroceder la compra.
+Para comunicar hechos, el productor guarda Outbox junto a su transacción de negocio y termina el comando sin esperar los suscriptores. Una tarea de Spring, cada segundo, realiza POST /interno/eventos a cada destinatario. El transporte HTTP individual es síncrono; el proceso de notificación es asíncrono respecto a la operación original. No se debe confundir esa distinción de niveles.
 
-La publicación ocurre desde un outbox guardado en la misma transacción que la transición de negocio. Un trabajo envía mensajes persistentes, espera publisher confirm y verifica mandatory returns antes de marcar enviado. Si la aplicación cae entre confirm y commit, puede republicar: inbox detecta eventId ya aplicado dentro de la transacción del consumidor. Las restricciones por pedido agregan una segunda barrera para pagos, asignaciones y calificaciones.
+La publicación-suscripción es estática y explícita: pedido.entregado tiene tres destinatarios y tres filas de entrega, con un eventId común. Cada una se confirma por separado. Si facturación no responde, pedidos y calificaciones pueden avanzar y sus entregas confirmadas no se repiten por ese fallo. La dirección de cada servicio se externaliza mediante variables de entorno.
 
-WebSocket es comunicación asíncrona de notificación desde logística. Las posiciones ingresan por REST y se emiten después del commit a /topic/pedidos/{pedidoId}. El cliente recupera última posición por REST al reconectar. En Compose un relay STOMP de RabbitMQ permite distribuir a conexiones de otras réplicas; el modo simple local se reserva para pruebas. No hay replay de posiciones ni autenticación productiva implementada.
+El receptor devuelve 204 tras persistir su efecto e Inbox. Una respuesta perdida puede provocar reenvío: Inbox por eventId y restricciones de negocio hacen idempotente el efecto. Las entregas fallidas permanecen en Outbox y se reintentan con espera exponencial 2/4/8/... hasta 60 segundos. No se descartan automáticamente. El operador consulta filas pendientes y logs ante fallos de contrato prolongados.
+
+Sobre común: eventId UUID, eventType string, version integer=1, occurredAt instant UTC, aggregateId string y payload object. Cada receptor valida versión, campos básicos y tipos de evento pertinentes. Los estados terminales impiden retrocesos por hechos tardíos; no se promete orden global ni exactly-once de red.
+
+WebSocket STOMP integrado de Spring notifica posiciones después del commit. La suscripción es /topic/pedidos/{pedidoId} en /ws; GET de asignación recupera la última posición al reconectar. Se utiliza una instancia de logística y no hay replay durable ni autenticación productiva. No se afirma escalabilidad horizontal del stream de esta implementación.
 
 <!-- pagebreak -->
 
@@ -135,13 +138,13 @@ Una compra inicia PAGO_PENDIENTE. Confirmar cobro crea PENDIENTE_ACEPTACION, fij
 
 Aceptación, rechazo y expiración bloquean la misma fila. Una carrera no puede producir dos decisiones válidas desde la misma versión. Si se rechaza antes del plazo, se cancela por decisión del restaurante. Si se cumple el plazo, se cancela por vencimiento. Un segundo intento sobre estado terminal genera conflicto y no produce otra cancelación. Un pago rechazado no habilita aceptación ni inicia el temporizador.
 
-Pagos recibe cancelación y marca un trabajo de reembolso. No mantiene el mensaje del broker abierto durante todos los reintentos externos. El proveedor recibe refund-{pagoId}, clave que se conserva incluso si la respuesta se pierde después del efecto. Para cobro se usa charge-{pedidoId}; ante timeout se consulta estado antes de permitir repetir el mismo intento. Las restricciones de base y la idempotencia del proveedor tienen responsabilidades diferentes: la base sola no puede evitar un segundo efecto remoto después de una caída.
+Pagos recibe cancelación y marca un trabajo de reembolso. No mantiene la recepción del evento abierto durante todos los reintentos externos. El proveedor recibe refund-{pagoId}, clave que se conserva incluso si la respuesta se pierde después del efecto. Para cobro se usa charge-{pedidoId}; ante timeout se consulta estado antes de permitir repetir el mismo intento. Las restricciones de base y la idempotencia del proveedor tienen responsabilidades diferentes: la base sola no puede evitar un segundo efecto remoto después de una caída.
 
 Logística recibe únicamente pedidos aceptados. Si no hay disponibilidad, conserva una asignación pendiente y reintenta cada diez segundos. La reserva bloquea candidatos, elige el mínimo Haversine y marca ocupado en una sola transacción. Completar entrega libera al repartidor y publica un único hecho de entrega. Los pedidos entregados no vuelven a asignados aunque llegue tarde un evento previo.
 
-Política de fallos: RabbitMQ realiza tres intentos totales con esperas de 1 y 2 segundos y después envía a DLQ. Los trabajos de reembolso y factura realizan tres intentos con esperas de 2 y 4 segundos, después quedan en revisión y admiten recuperación REST con clave estable. HTTP usa timeout de conexión de 2 s y lectura de 3 s. Los errores de dependencia devuelven 503; conflictos de estado o concurrencia, 409. No se reintenta automáticamente una tarjeta rechazada.
+Política de notificación: cada entrega HTTP se reintenta en segundo plano con espera 2/4/8/... hasta un máximo de 60 segundos y se conserva pendiente hasta confirmar el efecto. Los trabajos de reembolso y factura realizan tres intentos con esperas de 2 y 4 segundos, después quedan en revisión y admiten recuperación REST con clave estable. HTTP usa timeout de conexión de 2 s y lectura de 3 s. Los errores de dependencia devuelven 503; conflictos de estado o concurrencia, 409. No se reintenta automáticamente una tarjeta rechazada.
 
-Escalabilidad: las aplicaciones pueden desplegarse por separado; las réplicas compiten por filas y mensajes, manteniendo propiedad de datos. La selección de todos los candidatos y el barrido del outbox son adecuados para el volumen académico pero requieren paginación, índices y medición para volúmenes mayores. No se afirma capacidad de carga sin medirla. La versión académica usa Hibernate update; producción requiere migraciones versionadas y controles de acceso.
+Escalabilidad: las aplicaciones pueden desplegarse por separado; las réplicas compiten por filas de trabajo, manteniendo propiedad de datos. La selección de todos los candidatos y el barrido del outbox son adecuados para el volumen académico pero requieren paginación, índices y medición para volúmenes mayores. No se afirma capacidad de carga sin medirla. La versión académica usa Hibernate update; producción requiere migraciones versionadas y controles de acceso.
 
 <!-- pagebreak -->
 
@@ -169,7 +172,7 @@ Entradas: Idempotency-Key string de 1..128; ProcesarPago {pedidoId string no vac
 
 Salidas: Pago con id string UUID, pedidoId string, clave string, fingerprint string SHA-256, importe BigDecimal, estado enum de negocio AUTORIZADO o RECHAZADO, referencia string externa simulada, campos de compensación inicialmente nulos y contador de reintentos int32. El token no se persiste ni se devuelve.
 
-Reglas: pedido debe estar PAGO_PENDIENTE y no tener otro pago. Un pago por pedido y una clave por operación mediante restricciones UNIQUE. Comparar fingerprint de pedido y token para detectar clave reutilizada con otro cuerpo. El adaptador HTTP cobra con clave estable charge-{pedidoId}, incluso si dos llamadas cliente usan claves diferentes; esta segunda barrera evita un doble cargo externo. Ante fallo del POST consulta /mock/operaciones/{key} antes de devolver error. Si la operación aún no existe, el cliente puede repetir el POST original con la misma clave. No hay un bucle automático de cobro ciego. Autorización y rechazo producen eventos diferentes en outbox dentro de la transacción SQL.
+Reglas: pedido debe estar PAGO_PENDIENTE y no tener otro pago. Un pago por pedido y una clave por operación mediante restricciones UNIQUE. Comparar fingerprint de pedido y token para detectar clave reutilizada con otro cuerpo. El adaptador HTTP cobra con clave estable charge-{pedidoId}, incluso si dos llamadas cliente usan claves diferentes; esta segunda barrera evita un doble cargo externo. Ante fallo del POST consulta /mock/operaciones/{key} antes de devolver error. Si la operación aún no existe, el cliente puede repetir el POST original con la misma clave. No hay un bucle automático de cobro ciego. Autorización y rechazo generan entregas HTTP diferidas en outbox dentro de la transacción SQL.
 
 Compensación: pedido.cancelado marca REEMBOLSO_PENDIENTE. Un trabajo consulta pendientes y reembolsa con refund-{pagoId}. La misma referencia de operación se conserva ante reintento y ante respuesta perdida. Un fallo programa esperas de 2 y 4 segundos; al fallar el tercer intento queda REEMBOLSO_REVISION. POST /api/v1/pagos/pedido/{id}/reintentar-reembolso permite recuperación manual. Un pago reembolsado no vuelve a entrar a pendientes por un evento repetido.
 
@@ -189,7 +192,7 @@ Salidas: Asignacion {pedidoId string, clienteId string, repartidorId string o nu
 
 Reglas: solo asignar pedidos incorporados a partir de un evento de aceptación. Comparar únicamente repartidores disponibles. Distancia Haversine: a=sin²(deltaLat/2)+cos(lat1)*cos(lat2)*sin²(deltaLon/2); d=2*6371*atan2(sqrt(a),sqrt(1-a)), ángulos en radianes y a limitado a [0,1]. Es distancia geodésica en km; no considera tráfico ni rutas viales. Desempate por identificador lexicográfico. Bloqueo pesimista sobre candidatos y asignación para reservar sin duplicar. Si no hay disponibles, conservar ASIGNACION_PENDIENTE y emitir asignacion.pendiente. Un trabajo reintenta cada diez segundos. Entregar libera al repartidor. REST de asignación repite el resultado existente y no cambia el repartidor de una entrega ya asignada.
 
-Errores: 409 PEDIDO_NO_ACEPTADO para solicitud sin aceptación recibida; 404 ASIGNACION_NO_EXISTE en consulta; 409 CONFLICTO_CONCURRENCIA_REINTENTAR por disputa SQL. Ausencia de repartidores devuelve 202, no error técnico. Los eventos malformados no se incorporan y agotan reintentos hacia DLQ.
+Errores: 409 PEDIDO_NO_ACEPTADO para solicitud sin aceptación recibida; 404 ASIGNACION_NO_EXISTE en consulta; 409 CONFLICTO_CONCURRENCIA_REINTENTAR por disputa SQL. Ausencia de repartidores devuelve 202, no error técnico. El receptor rechaza eventos malformados con 400 EVENTO_INVALIDO. La entrega permanece pendiente en el emisor para revisión y reintento.
 
 Calidad verificable: prueba de un grado de longitud en ecuador aproximadamente 111.195 km con tolerancia 0.01 km; selección del más cercano; reserva de distintos repartidores en dos solicitudes concurrentes. Objetivo p95 <=1 s con 1000 repartidores, pendiente medir. El bloqueo de todos los candidatos prioriza corrección para el ejercicio y limita rendimiento: un despliegue mayor requiere índice geoespacial y selección por lotes, manteniendo reserva atómica.
 
@@ -203,37 +206,27 @@ Entradas: pedidoId string en ruta; Ubicacion {repartidorId string no vacío, lat
 
 Salidas: Asignacion con posición persistida, secuencia y timestamps UTC. Tras commit se emite mensaje {pedidoId string, latitud double, longitud double, sequence int64, capturedAt instant, receivedAt instant} a /topic/pedidos/{pedidoId}; conexión WebSocket STOMP en /ws. GET /api/v1/asignaciones/{pedidoId} permite recuperar la última posición. La vista /seguimiento.html facilita la demostración.
 
-Reglas: solo repartidor asignado y estado ASIGNADO. Rechazar fecha futura mayor a 30 s. Exigir secuencia creciente; repetición exacta de secuencia, coordenadas y capturedAt retorna el resultado anterior; cualquier otro mensaje atrasado genera conflicto. Persistir posición y actualizar coordenadas del repartidor. Emitir únicamente tras commit para no divulgar datos revertidos. Si el broker WebSocket falla, la posición permanece consultable: la difusión es mejor esfuerzo, sin promesa de replay. En Compose se usa relay STOMP de RabbitMQ para compartir mensajes entre réplicas; fuera de Compose el broker simple local queda por defecto para demostración y pruebas.
+Reglas: solo repartidor asignado y estado ASIGNADO. Rechazar fecha futura mayor a 30 s. Exigir secuencia creciente; repetición exacta de secuencia, coordenadas y capturedAt retorna el resultado anterior; cualquier otro mensaje atrasado genera conflicto. Persistir posición y actualizar coordenadas del repartidor. Emitir únicamente tras commit para no divulgar datos revertidos. Si la difusión WebSocket falla, la posición permanece consultable: la difusión es mejor esfuerzo, sin promesa de replay. Se utiliza el soporte STOMP/WebSocket integrado de Spring y una sola instancia de logística; no se distribuyen suscripciones entre procesos.
 
 Errores: 400 DATOS_INVALIDOS o FECHA_FUTURA; 404 ASIGNACION_NO_EXISTE; 403 REPARTIDOR_NO_ASIGNADO; 409 ENTREGA_FINALIZADA, POSICION_ATRASADA o CONFLICTO_CONCURRENCIA_REINTENTAR.
 
-Calidad verificable: persistencia de coordenadas, rechazo de secuencia atrasada, repetición exacta y emisión a SimpMessagingTemplate después del commit. Esta prueba no equivale a comprobar una conexión de navegador completa contra RabbitMQ. Objetivo p95 <=1 s entre recepción y emisión con 20 conexiones, pendiente medir. No se exponen puertos de servicios fuera de localhost por defecto; falta autenticación/autorización para uso real.
+Calidad verificable: persistencia de coordenadas, rechazo de secuencia atrasada, repetición exacta y emisión a SimpMessagingTemplate después del commit. Esta prueba no equivale a comprobar una conexión de navegador completa. Objetivo p95 <=1 s entre recepción y emisión con 20 conexiones, pendiente medir. Los servicios escuchan en 127.0.0.1 por defecto (SERVER_ADDRESS); falta autenticación/autorización para uso real.
 
 <!-- pagebreak -->
 
 # 12. Implementación, pruebas y evidencia
 
-La implementación mantiene seis aplicaciones con su propio POM, controller, DTO, modelo, repositorio, servicio y configuración. Dos aplicaciones adicionales representan pasarela y legado mediante HTTP. Java 21, Spring Boot y Maven constituyen la base; MySQL conserva datos, RabbitMQ hechos y WebSocket posiciones. Compose configura ocho aplicaciones y dos componentes de infraestructura.
+La implementación contiene seis aplicaciones con POM, controllers, DTOs, modelos, repositorios, servicios y configuración propios. Pasarela y facturación heredada son dos aplicaciones HTTP adicionales de simulación. Todas se inician directamente con Java 21 y Maven; MySQL se instala como servidor local y cada aplicación conserva una base diferente.
 
-La ejecución local de Maven verify obtuvo BUILD SUCCESS con 29 pruebas, sin errores ni fallos en los reportes actuales. Se ejecutó en Windows con JDK 21.0.8 y Maven 3.9.9; por las restricciones del sandbox se precargó el agente de Mockito y se usó forkCount=0. Los módulos produjeron JAR ejecutables. El registro detallado aparece en resultados-pruebas.md.
+Las pruebas de persistencia utilizan H2 en modo MySQL; MockRestServiceServer controla respuestas HTTP de adaptadores y MockMvc verifica sus contratos. La nueva suite prueba publicación con tres destinatarios, reintento de un suscriptor sin repetir las entregas confirmadas y recepción HTTP con deduplicación. Se mantienen pruebas de precio, límite exacto de cinco minutos, rechazo, reembolso único, reserva concurrente, posición, entrega, opinión y factura.
 
-| Grupo de verificación | Evidencia |
-|---|---|
-| Catálogo | menú/precio decimal y restaurante inexistente |
-| Pedidos | importe, idempotencia, pago rechazado, aceptación y plazo exacto |
-| Pagos | autorización/rechazo, respuesta perdida, reembolso único y reintento |
-| Logística | Haversine, ausencia, más cercano, reserva concurrente y posiciones |
-| Seguimiento | emisión a plantilla WebSocket después del commit |
-| Calificaciones | solo entrega confirmada y cliente correspondiente |
-| Facturación y mocks | fallo transitorio, reintento, referencia y folio estables |
+La suite obtuvo BUILD SUCCESS con 32 pruebas sin fallos. Además, el recorrido completo se ejecutó con ocho procesos Spring Boot y transporte HTTP real sobre H2 temporal: entrega, posición, calificación, factura, respuesta perdida conciliada, rechazo/reembolso y tarjeta rechazada. Los resultados y el comando real se registran en resultados-pruebas.md. No se afirma verificación contra MySQL real cuando solo se ejecutó H2. La emisión WebSocket después del commit se prueba hacia SimpMessagingTemplate; no equivale a una prueba de navegador. Los objetivos de rendimiento siguen pendientes de prueba de carga.
 
-Las pruebas de servicio usan H2 en modo MySQL y respuestas HTTP controladas. Los mocks tienen pruebas HTTP MockMvc. La prueba de WebSocket verifica el límite de commit, no una conexión real de navegador. La reserva concurrente se ejecuta con dos solicitudes simultáneas y comprueba identificadores de repartidor distintos.
+La colección Postman permite realizar la demostración sobre los servicios locales. scripts/iniciar-servicio.ps1 asigna la base y las variables de cada proceso; pruebas/smoke.py ejecuta el recorrido completo cuando las ocho aplicaciones están iniciadas. Los tokens ok, reject y timeout-once simulan autorización, rechazo y respuesta perdida después del efecto. Las pruebas temporales usan Clock controlado y no requieren esperar cinco minutos reales.
 
-No se ejecutó Docker localmente porque no está instalado o disponible en PATH. Por ello este documento no afirma un E2E local con MySQL, RabbitMQ y relay reales. El repositorio contiene pruebas/smoke.py y un trabajo de GitHub Actions que construye Compose, ejecuta el camino exitoso y alternativas y guarda logs. El resultado de ese trabajo debe verificarse en Actions; no se presume aprobado por el hecho de existir.
+Límites: endpoints internos solo para red local de confianza, sin autenticación productiva; suscripciones estáticas; una instancia de logística para el stream de posiciones; mocks en memoria que pierden operaciones al reiniciarse. La selección de candidatos y el barrido de Outbox priorizan corrección académica, pero requieren índices, paginación y medición para volúmenes mayores.
 
-La colección Postman permite repetir el recorrido con pausas para consistencia eventual. Los tokens ok, reject y timeout-once demuestran autorización, rechazo y respuesta ambigua. Las pruebas temporales usan Clock controlado para comprobar igualdad a 300 s sin esperar cinco minutos reales.
-
-Límites: sin autenticación productiva, sin pruebas de carga y con mocks en memoria que pierden operaciones tras reinicio. Los cinco pasos y nombres de patrones deben cotejarse con la presentación completa. La defensa requiere participación real del equipo.
+Cada decisión tiene una razón en el caso: precios desde catálogo evitan importes manipulados; aceptación protegida por límite evita decisiones tardías; claves del proveedor evitan duplicar compensaciones; entregas separadas permiten que factura y opinión no bloqueen la compra; el adaptador conserva el legado de 2012 sin propagar su formato a todos los equipos. La preparación del debate no acredita que el equipo haya realizado la defensa oral.
 
 <!-- pagebreak -->
 
@@ -243,14 +236,14 @@ Guion de cinco minutos. 0:00–0:40: presentar actores y riesgos de plazo, doble
 
 Réplica 1: «¿Cómo impiden aceptar mientras vence el pedido?» Respuesta: ambas decisiones bloquean la misma fila y aceptar comprueba now < limite; el scheduler no es la única protección. La igualdad ya es vencimiento. No se confunde precisión de regla con latencia de materialización.
 
-Réplica 2: «¿RabbitMQ garantiza exactly-once?» Respuesta: no se promete esa semántica. Outbox recupera publicación, inbox tolera reentregas y claves estables evitan duplicar efectos de proveedor. Si el proveedor carece de idempotencia, se necesita conciliación adicional; el mock solo demuestra el contrato esperado.
+Réplica 2: «¿HTTP garantiza que no se duplique el efecto?» Respuesta: no se promete esa semántica. Outbox recupera publicación, inbox tolera reentregas y claves estables evitan duplicar efectos de proveedor. Si el proveedor carece de idempotencia, se necesita conciliación adicional; el mock solo demuestra el contrato esperado.
 
 Réplica 3: «¿Por qué no sustituir facturación?» Respuesta: el caso lo prohíbe. El wrapper transforma el contrato y protege el resto del sistema de su formato. La simulación HTTP no atribuye REST al sistema real de 2012.
 
-Réplica 4: «¿Tres consumidores de la misma cola bastan para fan-out?» Respuesta: no; competirían por mensajes. Cada servicio interesado necesita su propia cola enlazada al mismo hecho. Pregunta al otro equipo: ¿qué ocurre si su pasarela cobra pero la respuesta se pierde? Explicar la necesidad de consultar y repetir con la misma clave.
+Réplica 4: «¿Qué ocurre si falla solo facturación?» Respuesta: cada suscriptor tiene su propia entrega persistida; se reintenta la de facturación y no se repiten las ya confirmadas de pedidos y calificaciones. Pregunta al otro equipo: ¿qué ocurre si su pasarela cobra pero la respuesta se pierde? Explicar la necesidad de consultar y repetir con la misma clave.
 
 Plan de dos semanas. Semana 1: modelado, actividades/operaciones, matriz, dominios, contratos y revisión de avance. Semana 2: patrones justificados, estrategia de mensajes, cuatro capacidades, implementación, pruebas y debate. El repositorio registra resultados ejecutados; la entrega por plataforma y la defensa corresponden al equipo. La fecha oficial de entrega permanece sin especificar en la consigna.
 
 Referencias. Material del curso: Retos_Unidad_2_Diseno_de_servicios.pdf, Reto 2, pp. 10–17. Erl, T. (2009), SOA Design Patterns, Prentice Hall; índice oficial consultado el 23-10-2026: https://www.thomaserl.com/book/soa-design-patterns/table-of-contents/index.html. Presentación completa de Unidad 2: pendiente de proporcionar para cotejo, sin atribuirle definiciones no disponibles. FitZone se recibió como referencia tecnológica; no se modificó ni se afirma haber verificado su estilo cuando no se pudo recuperar.
 
-Material reproducible: README, docker-compose.yml, pruebas/postman, pruebas/smoke.py, diagramas Mermaid y fuentes Java. La defensa debe explicar qué fue probado y qué sigue siendo un objetivo de calidad, sin presentar una simulación como integración productiva.
+Material reproducible: README, scripts de ejecución local, pruebas/postman, pruebas/smoke.py, diagramas Mermaid y fuentes Java. La defensa debe explicar qué fue probado y qué sigue siendo un objetivo de calidad, sin presentar una simulación como integración productiva.

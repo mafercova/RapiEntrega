@@ -1,204 +1,70 @@
-# RapiEntrega
+# RapiEntrega · Reto 2
+Plataforma académica de entregas con Java 21, Spring Boot, Maven, MySQL, JPA, Bean Validation, REST y WebSocket. Se ejecuta directamente con Maven. Cada servicio conserva su base y sus responsabilidades.
 
-Plataforma de entregas construida como un monorepositorio de microservicios con Java 21 y Spring Boot.
-
-El sistema permite gestionar restaurantes, pedidos, pagos, logística, facturación y calificaciones mediante APIs REST y comunicación asíncrona con RabbitMQ.
-
-## Tecnologías
-
-- Java 21
-- Spring Boot
-- Maven
-- MySQL
-- RabbitMQ
-- REST
-- WebSocket
-- Docker Compose
-
-## Arquitectura
-
-El proyecto está dividido en los siguientes servicios:
-
-| Servicio | Puerto | Responsabilidad |
-|---|---:|---|
-| Catálogo | 8081 | Restaurantes y productos |
-| Pedidos | 8082 | Creación y seguimiento de pedidos |
-| Pagos | 8083 | Procesamiento y compensación de pagos |
-| Logística | 8084 | Asignación y seguimiento de repartidores |
-| Facturación | 8085 | Generación de facturas |
-| Calificaciones | 8086 | Opiniones y calificaciones |
-| Pasarela mock | 8091 | Simulación del proveedor de pagos |
-| Facturación legado mock | 8092 | Simulación del sistema de facturación externo |
-
-Infraestructura:
-
-| Componente | Puerto |
-|---|---:|
-| MySQL | 3306 |
-| RabbitMQ | 5672 |
-| Panel de administración de RabbitMQ | 15672 |
-
-## Requisitos
-
-Para ejecutar el proyecto completo:
-
-- Docker Desktop
-- Docker Compose
-- PowerShell 7
-
-Para compilar y probar sin Docker:
-
-- JDK 21
-- Maven 3.9+ o Maven Wrapper
-
-## Ejecución rápida con Docker
-
-Desde la raíz del repositorio:
-
+## Requisitos e inicio local
+Instalar JDK 21, MySQL Server y PowerShell 7. Agregar mysql.exe a PATH y configurar JAVA_HOME al JDK 21. Maven Wrapper descarga Maven 3.9.9 en su primera ejecución.
 ```powershell
+$env:JAVA_HOME = 'C:\Program Files\Java\jdk-21' # adaptar a tu instalación
 .\scripts\preparar-entorno.ps1
-docker compose up -d --build
-```
-
-Para comprobar el estado de los servicios:
-
-```powershell
-docker compose ps
-```
-
-Para consultar los logs:
-
-```powershell
-docker compose logs -f pedidos pagos logistica
-```
-
-Para detener los servicios:
-
-```powershell
-docker compose down
-```
-
-Los servicios quedan disponibles en `localhost` usando los puertos indicados en la tabla de arquitectura.
-
-## Compilar y ejecutar pruebas
-
-Con PowerShell:
-
-```powershell
+.\scripts\crear-bases.ps1
 .\mvnw.cmd verify
 ```
+crear-bases pide la contraseña del administrador de MySQL, crea seis bases y usuarios locales y conserva datos existentes. Las claves de aplicaciones se generan en .env y no se muestran ni se incluyen en Git. Si un usuario MySQL ya existe con otra contraseña, actualízala de forma explícita para que coincida con .env; el script no sobrescribe cuentas existentes. El SQL de solo creación de bases está en pruebas/sql/01-databases.sql para consulta en Workbench.
 
-También es posible utilizar una instalación local de Maven:
-
+En ocho terminales diferentes, desde el repositorio, ejecutar una aplicación por terminal:
 ```powershell
-mvn verify
+.\scripts\iniciar-servicio.ps1 -Servicio catalogo
+.\scripts\iniciar-servicio.ps1 -Servicio pedidos
+.\scripts\iniciar-servicio.ps1 -Servicio pagos
+.\scripts\iniciar-servicio.ps1 -Servicio logistica
+.\scripts\iniciar-servicio.ps1 -Servicio facturacion
+.\scripts\iniciar-servicio.ps1 -Servicio calificaciones
+.\scripts\iniciar-servicio.ps1 -Servicio pasarela-mock
+.\scripts\iniciar-servicio.ps1 -Servicio facturacion-legado-mock
 ```
+Cada comando permanece ejecutándose en su terminal. Ctrl+C detiene esa aplicación. Los dos mocks no requieren base. MySQL debe estar iniciado para los otros seis servicios. El perfil demo incorpora un restaurante, un producto de 65.50 MXN y dos repartidores. Las tablas de catálogo se preparan con schema.sql; las demás aplicaciones usan Hibernate update como simplificación académica.
 
-Las pruebas unitarias y de integración utilizan bases de datos y servicios simulados cuando corresponde, por lo que no requieren levantar toda la infraestructura para ejecutarse.
+| Aplicación | Puerto | Propietario de datos |
+|---|---:|---|
+| catálogo | 8081 | restaurantes y productos |
+| pedidos | 8082 | pedido, importes y plazo |
+| pagos | 8083 | cobros y compensación |
+| logística | 8084 | repartidores, asignación y posición |
+| facturación | 8085 | trabajos y folios |
+| calificaciones | 8086 | entrega proyectada y opinión |
+| pasarela mock | 8091 | operaciones ficticias en memoria |
+| legado mock | 8092 | folios ficticios en memoria |
 
-## Ejemplo de flujo principal
+## Comunicación entre servicios
+REST solicitud-respuesta resuelve consultas, pago, aceptación y comandos inmediatos. Para eventos, el servicio guarda una entrega por suscriptor en su tabla Outbox dentro de la transacción de negocio. Una tarea de Spring envía HTTP a POST /interno/eventos en segundo plano; el receptor responde 204 después de persistir su efecto e inbox. Si falla, solo esa entrega se reintenta con espera 2/4/8/... hasta 60 segundos. Las entregas ya confirmadas no se repiten por el fallo de otro suscriptor. Si se pierde una respuesta, puede haber reenvío: inbox por eventId y claves de negocio protegen los efectos.
 
-### 1. Consultar restaurantes
+Publicación-suscripción es una distribución estática implementada por la aplicación: pedido.entregado genera tres entregas independientes a pedidos, facturación y calificaciones. La petición HTTP de cada entrega es síncrona; el proceso de publicación es asíncrono respecto al comando original. No se promete exactly-once de red. Las suscripciones están declaradas en Eventos y los destinos se configuran con variables de entorno.
 
+Logística transmite las posiciones mediante WebSocket integrado de Spring (/ws, STOMP, /topic/pedidos/{pedidoId}). El stream funciona dentro de una instancia del servicio; para esta entrega se ejecuta una sola instancia de logística. La posición queda persistida para recuperarla con REST al reconectar.
+
+## Probar el flujo
+Importar pruebas/postman/RapiEntrega.postman_collection.json y cambiar runId para cada compra. Esperar los estados indicados porque las notificaciones se entregan en segundo plano.
 ```powershell
 Invoke-RestMethod http://localhost:8081/api/v1/restaurantes
-```
-
-### 2. Consultar el menú de un restaurante
-
-```powershell
 Invoke-RestMethod http://localhost:8081/api/v1/restaurantes/1/menu
-```
-
-### 3. Crear un pedido
-
-```powershell
-$pedido = Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8082/api/v1/pedidos `
-  -ContentType application/json `
-  -Headers @{
-    'Idempotency-Key' = [guid]::NewGuid().ToString()
-  } `
-  -Body '{
-    "clienteId": "cliente-1",
-    "restauranteId": 1,
-    "items": [
-      {
-        "productoId": 1,
-        "cantidad": 1
-      }
-    ],
-    "entrega": {
-      "latitud": 19.44,
-      "longitud": -99.14,
-      "direccion": "Campus universitario"
-    }
-  }'
-```
-
-### 4. Consultar el pedido
-
-```powershell
+$pedido = Invoke-RestMethod -Method Post -Uri http://localhost:8082/api/v1/pedidos -ContentType application/json -Headers @{'Idempotency-Key'=[guid]::NewGuid().ToString()} -Body '{"clienteId":"cliente-demo","restauranteId":1,"items":[{"productoId":1,"cantidad":2}],"entrega":{"latitud":19.44,"longitud":-99.14,"direccion":"Campus"}}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8083/api/v1/pagos -ContentType application/json -Headers @{'Idempotency-Key'=[guid]::NewGuid().ToString()} -Body (@{pedidoId=$pedido.id;tokenTarjeta='ok'} | ConvertTo-Json)
 Invoke-RestMethod "http://localhost:8082/api/v1/pedidos/$($pedido.id)"
-```
-
-Para consultar el flujo completo y las peticiones disponibles, puede importarse la colección:
-
-```text
-pruebas/postman/RapiEntrega.postman_collection.json
-```
-
-## Smoke tests
-
-Con los servicios levantados:
-
-```powershell
+# Esperar PENDIENTE_ACEPTACION y aceptar antes de cinco minutos:
+Invoke-RestMethod -Method Post "http://localhost:8082/api/v1/pedidos/$($pedido.id)/aceptacion"
+Invoke-RestMethod "http://localhost:8084/api/v1/asignaciones/$($pedido.id)"
 python pruebas/smoke.py
 ```
+El script smoke crea sus propias compras y requiere las ocho aplicaciones levantadas. Incluye pago/entrega, posición, opinión, factura, rechazo/reembolso y tarjeta rechazada. La vista http://localhost:8084/seguimiento.html?pedidoId=ID_DEL_PEDIDO muestra ubicación y actualizaciones. Desde Postman se envían posiciones y se completa entrega.
 
-## Seguimiento en tiempo real
+Alternativas: token reject rechaza el pago y timeout-once simula una respuesta perdida después de cobrar. POST /api/v1/pedidos/{id}/rechazo cancela. Si no se acepta en 300 segundos desde pendienteAceptacionAt, se cancela y solicita reembolso; aceptar en el límite ya no es válido. Reembolso y factura tienen tres intentos y luego estado de revisión. Para recuperar: POST /api/v1/pagos/pedido/{id}/reintentar-reembolso o POST /api/v1/facturas/{id}/reintentar.
 
-Después de asignar un pedido, puede abrirse la vista de seguimiento en:
+## Configuración
+.env contiene MYSQL_HOST, MYSQL_PORT y una clave {SERVICIO}_DB_PASSWORD por aplicación; los scripts las cargan sin imprimirlas. Spring recibe DB_URL, DB_USER, DB_PASSWORD, PORT y URLs de servicios: CATALOGO_URL, PEDIDOS_URL, PAGOS_URL, LOGISTICA_URL, FACTURACION_URL, CALIFICACIONES_URL, PASARELA_URL y LEGADO_URL. EVENTOS_HABILITADOS=false desactiva el envío de notificaciones únicamente para pruebas aisladas.
 
-```text
-http://localhost:8084/seguimiento.html?pedidoId=ID_DEL_PEDIDO
-```
+## Entregables y verificación
+- [Documento académico de 13 páginas](documentacion/reporte-final/RapiEntrega-Reto2.pdf) y [fuente](documentacion/reporte-final/RapiEntrega-Reto2.md).
+- [Dominios y servicios](documentacion/dominios/arquitectura.md), [matriz](documentacion/modelado/proceso-y-matriz.md), [contratos](documentacion/contratos-api/contratos.md) y [cuatro capacidades](documentacion/especificaciones/capacidades.md).
+- [Patrones](documentacion/patrones/justificacion.md), [defensa y réplica](documentacion/reporte-final/defensa.md) y [resultados reales](documentacion/reporte-final/resultados-pruebas.md).
 
-La vista muestra la última posición del pedido y las actualizaciones recibidas mediante WebSocket.
-
-## Estructura del repositorio
-
-```text
-.
-├── servicios/
-│   ├── catalogo-service/
-│   ├── pedidos-service/
-│   ├── pagos-service/
-│   ├── logistica-service/
-│   ├── facturacion-service/
-│   └── calificaciones-service/
-├── integraciones/
-│   ├── pasarela-mock/
-│   └── facturacion-legado-mock/
-├── pruebas/
-├── scripts/
-├── docker-compose.yml
-└── pom.xml
-```
-
-## Notas
-
-Los servicios mock están pensados para desarrollo y pruebas. Utilizan almacenamiento en memoria, por lo que su información se pierde al reiniciarlos.
-
-Las variables de entorno y credenciales locales deben mantenerse fuera del repositorio. No subas archivos `.env` con información sensible.
-
-## Entregables académicos del Reto 2
-
-- [Documento de diseño de 13 páginas](documentacion/reporte-final/RapiEntrega-Reto2.pdf).
-- [Diagrama de dominios](documentacion/dominios/diagrama-dominios.mmd).
-- [Especificaciones y contratos](documentacion/especificaciones/capacidades.md).
-- [Defensa de cinco minutos](documentacion/reporte-final/defensa.md).
-- [Resultados reales y límites](documentacion/reporte-final/resultados-pruebas.md).
-
-Los cinco pasos y los patrones deben cotejarse con la presentación completa de Unidad 2, que aún no se ha proporcionado. Los mocks y las pruebas no sustituyen esa validación académica.
+GitHub Actions ejecuta mvn verify y después python pruebas/flujo-local.py. Este segundo comando también puede ejecutarse localmente tras compilar: inicia ocho procesos Java en puertos temporales, usa H2 y los detiene al terminar, sin tocar MySQL. Requiere Python 3.12+ y JAVA_HOME. Las pruebas usan H2 y HTTP controlado; sus resultados no equivalen a una prueba contra MySQL real. Las integraciones son simulaciones HTTP con estado en memoria. Los objetivos p95 requieren medir carga; no hay autenticación productiva. Ejecutar los endpoints internos en una red local de confianza. Las cinco etapas y selección de patrones deben cotejarse con la presentación completa de Unidad 2; el PDF del reto no las reproduce. La defensa oral corresponde al equipo.

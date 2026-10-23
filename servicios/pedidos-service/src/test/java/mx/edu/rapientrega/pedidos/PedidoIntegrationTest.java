@@ -25,9 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
       "spring.datasource.username=sa",
       "spring.datasource.password=",
       "spring.jpa.hibernate.ddl-auto=create-drop",
-      "app.messaging=false",
+      "app.eventos-habilitados=false",
       "app.jobs=false"
     })
+@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 @Import(HttpTestConfig.class)
 @Transactional
 class PedidoIntegrationTest {
@@ -148,5 +149,25 @@ class PedidoIntegrationTest {
     var id = crear();
     var p = service.consultar(id);
     assertEquals(id, service.registrarPedido(p.clave, solicitud()).id);
+  }
+
+  @Autowired org.springframework.test.web.servlet.MockMvc mvc;
+  @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
+
+  @Test
+  void recibeEventoPorHttpDespuesDePersistirYDeduplica() throws Exception {
+    var id = crear();
+    var e = new Evento("recibo-http", "pago.confirmado.v1", 1, now, id, Map.of("pagoId", "p1"));
+    String body = json.writeValueAsString(e);
+    for (int i = 0; i < 2; i++)
+      mvc.perform(
+              org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                      "/interno/eventos")
+                  .contentType("application/json")
+                  .content(body))
+          .andExpect(
+              org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                  .isNoContent());
+    assertEquals("PENDIENTE_ACEPTACION", service.consultar(id).estado);
   }
 }

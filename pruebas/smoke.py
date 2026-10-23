@@ -1,4 +1,4 @@
-"""Prueba HTTP de extremo a extremo sobre docker compose. Python 3, sin dependencias."""
+"""Prueba HTTP de extremo a extremo sobre las ocho aplicaciones locales. Python 3, sin dependencias."""
 import json, time, uuid, urllib.request, urllib.error
 
 def call(port,path,body=None,key=None):

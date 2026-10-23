@@ -20,8 +20,7 @@ import org.springframework.test.annotation.DirtiesContext;
       "spring.datasource.username=sa",
       "spring.datasource.password=",
       "spring.jpa.hibernate.ddl-auto=create-drop",
-      "app.messaging=false",
-      "spring.rabbitmq.password=unused-test",
+      "app.eventos-habilitados=false",
       "app.jobs=false"
     })
 @DirtiesContext

@@ -10,6 +10,15 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class Eventos {
+  private static final Map<String, List<String>> SUSCRIPTORES =
+      Map.ofEntries(
+          Map.entry("pago.confirmado.v1", List.of("pedidos")),
+          Map.entry("pago.rechazado.v1", List.of("pedidos")),
+          Map.entry("pedido.aceptado.v1", List.of("logistica")),
+          Map.entry("pedido.cancelado.v1", List.of("pagos")),
+          Map.entry("asignacion.pendiente.v1", List.of("pedidos")),
+          Map.entry("repartidor.asignado.v1", List.of("pedidos")),
+          Map.entry("pedido.entregado.v1", List.of("pedidos", "facturacion", "calificaciones")));
   private final OutboxRepository repo;
   private final ObjectMapper json;
   private final Clock clock;
@@ -20,13 +29,13 @@ public class Eventos {
     clock = c;
   }
 
-  public void publicar(String key, String id, Map<String, Object> payload) {
+  public void publicar(String tipo, String id, Map<String, Object> datos) {
     try {
-      repo.save(
-          new Outbox(
-              key,
-              json.writeValueAsString(
-                  new Evento(UUID.randomUUID().toString(), key, 1, clock.instant(), id, payload))));
+      var evento = new Evento(UUID.randomUUID().toString(), tipo, 1, clock.instant(), id, datos);
+      var cuerpo = json.writeValueAsString(evento);
+      var destinos = SUSCRIPTORES.get(tipo);
+      if (destinos == null) throw new IllegalArgumentException("EVENTO_NO_SOPORTADO");
+      for (String destino : destinos) repo.save(new Outbox(tipo, cuerpo, destino));
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new IllegalStateException(e);
     }

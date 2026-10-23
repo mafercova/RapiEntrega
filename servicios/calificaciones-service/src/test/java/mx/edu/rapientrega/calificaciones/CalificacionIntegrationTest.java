@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
       "spring.datasource.username=sa",
       "spring.datasource.password=",
       "spring.jpa.hibernate.ddl-auto=create-drop",
-      "app.messaging=false",
+      "app.eventos-habilitados=false",
       "app.jobs=false"
     })
 @Transactional

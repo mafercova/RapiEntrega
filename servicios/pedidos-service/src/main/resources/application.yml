@@ -1,4 +1,5 @@
 server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
   port: ${PORT:8082}
 spring:
   application:
@@ -11,22 +12,13 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: update
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    username: ${RABBITMQ_USER:rapientrega}
-    password: ${RABBITMQ_PASSWORD}
-    publisher-confirm-type: correlated
-    listener:
-      simple:
-        retry:
-          enabled: true
-          max-attempts: 3
-          initial-interval: 1000ms
-          multiplier: 2
-        default-requeue-rejected: false
 app:
-  messaging: ${MESSAGING_ENABLED:true}
+  eventos-habilitados: ${EVENTOS_HABILITADOS:true}
   catalogo-url: ${CATALOGO_URL:http://localhost:8081}
   pedidos-url: ${PEDIDOS_URL:http://localhost:8082}
+  pagos-url: ${PAGOS_URL:http://localhost:8083}
+  logistica-url: ${LOGISTICA_URL:http://localhost:8084}
+  facturacion-url: ${FACTURACION_URL:http://localhost:8085}
+  calificaciones-url: ${CALIFICACIONES_URL:http://localhost:8086}
   pasarela-url: ${PASARELA_URL:http://localhost:8091}
   legado-url: ${LEGADO_URL:http://localhost:8092}

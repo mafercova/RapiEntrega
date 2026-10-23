@@ -17,7 +17,7 @@ flowchart LR
  subgraph D5[Calificaciones]
   K[Calificaciones: opiniones de entregas]
  end
- Q[(RabbitMQ: eventos de dominio)]
+ Q[Entregas HTTP diferidas desde Outbox de cada productor]
  M[Pasarela externa simulada HTTP]
  H[Sistema heredado 2012: frontera simulada HTTP]
  cliente -->|REST consultar oferta| C

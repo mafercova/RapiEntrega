@@ -42,7 +42,7 @@
 			<polygon points="145 98, 142.6029 93.61209, 147.3971 93.61209" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(37%,47%,52%); fill-rule: evenodd;"/>
 			<path d="M 370,98 L 370,58 Z" style="stroke: rgb(37%,47%,52%); stroke-linecap: butt; stroke-width: 1;"/>
 			<polygon points="370 58, 372.3971 62.38791, 367.6029 62.38791" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(37%,47%,52%); fill-rule: evenodd;"/>
-			<text x="185.996337890625" y="82" style="font-family: Arial-Bold; font-size: 9px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,164) scale(1,-1)">RabbitMQ · hechos de negocio</text>
+			<text x="199.738037109375" y="82" style="font-family: Arial-Bold; font-size: 9px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,164) scale(1,-1)">Entregas HTTP diferidas</text>
 			<text x="138.833984375" y="66" style="font-family: Arial; font-size: 8px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,132) scale(1,-1)">REST para resultado inmediato; HTTP a integraciones externas</text>
 		</g>
 	</g>

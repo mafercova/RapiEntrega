@@ -27,9 +27,9 @@ Idempotency-Key es obligatorio en registrarPedido y procesarPago. Pedidos compar
 Importes BigDecimal, moneda fija MXN, timestamps ISO-8601 UTC. IDs son strings; pedido/pago/evento generan UUID y catálogo usa int64. No se guarda PAN, CVV ni token de tarjeta. Los errores locales usan application/problem+json con status, detail, code y correlationId. La proyección remota ausente puede devolver 409/404 mientras llega un evento: el cliente reconsulta con espera acotada. Las lecturas HTTP fallidas en dependencias se traducen a 503 DEPENDENCIA_NO_DISPONIBLE. Objetivos p95 están pendientes de pruebas de carga.
 
 ## Eventos de dominio
-Exchange durable topic rapientrega.eventos. Sobre: eventId string UUID, eventType string, version integer=1, occurredAt instant UTC, aggregateId string, payload object. Esquema: evento.schema.json. No hay orden global ni aggregateVersion en este contrato; las transiciones monotónicas y las claves de negocio protegen el estado.
+Notificaciones HTTP en segundo plano. Cada productor conserva una fila Outbox por suscriptor y realiza POST /interno/eventos en el servicio destinatario. Respuesta 204 después de aplicar el efecto e Inbox en la transacción del receptor. Sobre: eventId string UUID, eventType string, version integer=1, occurredAt instant UTC, aggregateId string, payload object. Esquema: evento.schema.json. Los receptores aceptan exclusivamente los tipos asignados a su servicio. Evento inválido: 400 EVENTO_INVALIDO. No hay orden global: estados monotónicos y claves de negocio protegen las transiciones.
 
-| Routing key | Publicador | Consumidores | Payload |
+| Tipo de evento | Publicador | Consumidores | Payload |
 |---|---|---|---|
 | pago.confirmado.v1 | pagos | pedidos | pedidoId, pagoId, importe decimal, moneda |
 | pago.rechazado.v1 | pagos | pedidos | pedidoId, pagoId, importe decimal, moneda |
@@ -39,11 +39,11 @@ Exchange durable topic rapientrega.eventos. Sobre: eventId string UUID, eventTyp
 | repartidor.asignado.v1 | logística | pedidos | pedidoId, repartidorId |
 | pedido.entregado.v1 | logística | pedidos, facturación, calificaciones | pedidoId, clienteId, deliveredAt instant |
 
-Cada servicio tiene {servicio}.eventos y {servicio}.dlq. Todos declaran la topología completa para evitar pérdidas por orden de arranque. Cada EventConsumer escucha solo su cola y claves pertinentes. Tres colas independientes reciben pedido.entregado: es publicación-suscripción, no consumidores competidores de una sola cola.
+Cada publicación persiste una entrega por destinatario con el mismo eventId y distinto id de entrega. La publicación de pedido.entregado genera tres entregas independientes: pedidos, facturación y calificaciones. Es publicación-suscripción estática implementada por la aplicación.
 
-Fiabilidad: outbox junto a transición SQL; mensajes persistentes; publisher confirms y mandatory returns; marca enviado solo tras confirmación. Una caída entre confirm y commit permite duplicados. Inbox con PK eventId en la transacción del efecto evita procesar de nuevo el mismo mensaje. Restricciones por pedido y claves externas protegen contra otro eventId con el mismo hecho. Entrega puede adelantar pedido desde aceptado a entregado; un evento tardío de asignación no lo retrocede.
+Outbox se guarda junto a la transición de negocio. Una tarea cada segundo envía pendientes por HTTP y marca enviado al recibir 2xx. Si hay timeout después de aplicar el efecto, puede reenviar: Inbox por eventId y restricciones de negocio evitan duplicación. Una entrega fallida no bloquea los demás suscriptores. Reintentos de notificación con espera 2, 4, 8, 16, 32 y máximo 60 segundos; no hay descarte automático. Revisar las filas pendientes y los logs si persiste un error de contrato. Las filas ya enviadas no vuelven a enviarse por un fallo ajeno.
 
-RabbitMQ: tres intentos totales con esperas 1/2 s, después DLQ. Reembolso y factura: trabajos persistidos, tres intentos con esperas 2/4 s y después estado de revisión. Recuperación REST conserva refund-{pagoId} o invoice-{pedidoId}. Un mensaje en DLQ se inspecciona antes de republicar con su mismo eventId. No existe endpoint público de inyección de eventos.
+Reembolso y factura mantienen su política propia: tres intentos con espera 2/4 s y revisión; recuperar con sus endpoints conserva refund-{pagoId} e invoice-{pedidoId}. No se confunde reintento de transporte de un hecho con un nuevo cobro o factura. Los endpoints internos se ejecutan en red local de confianza; falta autenticación para un despliegue productivo.
 
 ## Justificación de cada interacción
 - Cliente–catálogo y pedidos–catálogo: REST solicitud-respuesta síncrona porque la oferta y el precio son necesarios para continuar.
@@ -62,7 +62,7 @@ RabbitMQ: tres intentos totales con esperas 1/2 s, después DLQ. Reembolso y fac
 - Cliente–calificaciones: REST síncrono para saber si entrega y cliente permiten registrar opinión.
 
 ## Seguimiento
-Conexión STOMP WebSocket: ws://localhost:8084/ws. Suscripción /topic/pedidos/{pedidoId}. Mensaje JSON: pedidoId, latitud, longitud, sequence, capturedAt y receivedAt. La vista /seguimiento.html facilita la demostración. No hay replay durable del stream; posición persistida vía REST. Compose activa relay RabbitMQ STOMP para distribuir entre réplicas. El modo simple de prueba solo difunde a conexiones de su proceso.
+Conexión STOMP WebSocket: ws://localhost:8084/ws. Suscripción /topic/pedidos/{pedidoId}. Mensaje JSON: pedidoId, latitud, longitud, sequence, capturedAt y receivedAt. La vista /seguimiento.html facilita la demostración. No hay replay durable del stream; posición persistida vía REST. El WebSocket integrado de Spring difunde a conexiones de su proceso; se utiliza una instancia de logística.
 
 ```mermaid
 sequenceDiagram
@@ -70,7 +70,7 @@ sequenceDiagram
  participant P as Pedidos
  participant A as Pagos
  participant M as Pasarela mock HTTP
- participant Q as RabbitMQ
+ participant Q as Tarea HTTP diferida
  participant L as Logística
  C->>P: registrarPedido
  P-->>C: PAGO_PENDIENTE y total
