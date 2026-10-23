@@ -1,0 +1,32 @@
+server:
+  port: ${PORT:8083}
+spring:
+  application:
+    name: pagos-service
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/pagos}
+    username: ${DB_USER:pagos}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    username: ${RABBITMQ_USER:rapientrega}
+    password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2
+        default-requeue-rejected: false
+app:
+  messaging: ${MESSAGING_ENABLED:true}
+  catalogo-url: ${CATALOGO_URL:http://localhost:8081}
+  pedidos-url: ${PEDIDOS_URL:http://localhost:8082}
+  pasarela-url: ${PASARELA_URL:http://localhost:8091}
+  legado-url: ${LEGADO_URL:http://localhost:8092}

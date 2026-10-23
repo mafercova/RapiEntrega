@@ -1,0 +1,397 @@
+{
+  "info": {
+    "name": "RapiEntrega — flujo completo y alternativas",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "catalogoUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "pedidosUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "pagosUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "logisticaUrl",
+      "value": "http://localhost:8084"
+    },
+    {
+      "key": "facturacionUrl",
+      "value": "http://localhost:8085"
+    },
+    {
+      "key": "calificacionesUrl",
+      "value": "http://localhost:8086"
+    },
+    {
+      "key": "runId",
+      "value": "cambiar-por-cada-ejecucion"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 consultarRestaurantes",
+      "request": {
+        "method": "GET",
+        "url": "{{catalogoUrl}}/api/v1/restaurantes",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-0"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 consultarMenu",
+      "request": {
+        "method": "GET",
+        "url": "{{catalogoUrl}}/api/v1/restaurantes/1/menu",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-1"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 registrarPedido",
+      "request": {
+        "method": "POST",
+        "url": "{{pedidosUrl}}/api/v1/pedidos",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-2"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"clienteId\": \"cliente-demo\", \"restauranteId\": 1, \"items\": [{\"productoId\": 1, \"cantidad\": 2}], \"entrega\": {\"latitud\": 19.44, \"longitud\": -99.14, \"direccion\": \"Campus universitario\"}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Pedido registrado\", () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set(\"pedidoId\", pm.response.json().id);",
+              "pm.test(\"Precio calculado por catálogo\", () => pm.expect(pm.response.json().total).to.eql(131));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 procesarPago",
+      "request": {
+        "method": "POST",
+        "url": "{{pagosUrl}}/api/v1/pagos",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"pedidoId\": \"{{pedidoId}}\", \"tokenTarjeta\": \"ok\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 consultarPedido - repetir hasta PENDIENTE_ACEPTACION",
+      "request": {
+        "method": "GET",
+        "url": "{{pedidosUrl}}/api/v1/pedidos/{{pedidoId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-4"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 aceptarPedido",
+      "request": {
+        "method": "POST",
+        "url": "{{pedidosUrl}}/api/v1/pedidos/{{pedidoId}}/aceptacion",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-5"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 consultarAsignacion - repetir hasta ASIGNADO",
+      "request": {
+        "method": "GET",
+        "url": "{{logisticaUrl}}/api/v1/asignaciones/{{pedidoId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-6"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Asignado\", () => pm.expect(pm.response.json().estado).to.eql(\"ASIGNADO\"));",
+              "pm.collectionVariables.set(\"repartidorId\", pm.response.json().repartidorId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 actualizarUbicacion",
+      "request": {
+        "method": "POST",
+        "url": "{{logisticaUrl}}/api/v1/asignaciones/{{pedidoId}}/ubicaciones",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-7"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"repartidorId\": \"{{repartidorId}}\", \"latitud\": 19.44, \"longitud\": -99.14, \"capturedAt\": \"{{$isoTimestamp}}\", \"sequence\": 1}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 completarEntrega",
+      "request": {
+        "method": "POST",
+        "url": "{{logisticaUrl}}/api/v1/asignaciones/{{pedidoId}}/entrega",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"repartidorId\": \"{{repartidorId}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 registrarCalificacion - esperar evento de entrega",
+      "request": {
+        "method": "POST",
+        "url": "{{calificacionesUrl}}/api/v1/calificaciones",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-9"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"pedidoId\": \"{{pedidoId}}\", \"clienteId\": \"cliente-demo\", \"puntuacion\": 5, \"comentario\": \"Entrega correcta\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 consultarFactura - esperar job legado",
+      "request": {
+        "method": "GET",
+        "url": "{{facturacionUrl}}/api/v1/facturas/{{pedidoId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-10"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alternativa rechazarPedido (usar pedido nuevo pagado)",
+      "request": {
+        "method": "POST",
+        "url": "{{pedidosUrl}}/api/v1/pedidos/{{pedidoId}}/rechazo",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-11"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta exitosa\", () => pm.expect(pm.response.code).to.be.within(200,299));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS restaurante (id BIGINT PRIMARY KEY, nombre VARCHAR(255), disponible BOOLEAN NOT NULL, latitud DOUBLE NOT NULL, longitud DOUBLE NOT NULL);
+CREATE TABLE IF NOT EXISTS producto (id BIGINT PRIMARY KEY, restaurante_id BIGINT NOT NULL, nombre VARCHAR(255), precio DECIMAL(12,2) NOT NULL, disponible BOOLEAN NOT NULL, FOREIGN KEY (restaurante_id) REFERENCES restaurante(id));
